@@ -1,0 +1,3 @@
+youtube-dl
+eyed3
+titlecase
