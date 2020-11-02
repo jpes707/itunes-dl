@@ -8,6 +8,8 @@ import requests
 import shutil
 import re
 import atexit
+import json
+from fuzzywuzzy import fuzz, process
 from titlecase import titlecase
 from time import time
 from threading import Thread
@@ -46,8 +48,30 @@ def get_titlecase(s, override_legacy_rename=False):
 def download_song(track, track_num, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path):
     song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + album_artist).replace(' ', '+'))
     song_search_res = requests.get(song_search_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'}).text
-    song_search_res = song_search_res[song_search_res.index('videoId', song_search_res.index(r'\"text\":\"Songs\"'))+12:]
-    song_url = 'https://music.youtube.com/watch?v={}'.format(song_search_res[:song_search_res.index(r'\"')])
+    youtube_tracks = []
+    youtube_urls = []
+    try:
+        song_search_res = json.loads(song_search_res[song_search_res.rindex('data: "')+7:song_search_res.rindex('}"')+1].replace('\\', ''))
+    except:
+        print()
+        print(song_search_res[song_search_res.rindex('data: "')+7:song_search_res.rindex('}"')+1].replace('\\', ''))
+        print()
+        exit()
+    for elem in song_search_res:
+        print(elem)
+        exit()
+        song_url = 'https://music.youtube.com/watch?v={}'.format(song_search_res[:song_search_res.index(r'\"')])
+        accessibility_index = song_search_res.index(r'\"accessibilityData\"')
+        youtube_title = song_search_res[accessibility_index + 40 : song_search_res.index(r'\"', accessibility_index + 40)]
+        youtube_tracks.append(youtube_title)
+        youtube_urls.append(youtube_tracks)
+    tup = process.extractOne(track, youtube_tracks)
+    print(track, tup)
+    youtube_title = tup[0]
+    song_url = youtube_urls[youtube_tracks.index(youtube_title)]
+    if tup[1] != 100:
+        print('WARNING: Apple Music track "{}" may not be the same as YouTube Music track "{}" ({})! Downloading anyway...'.format(track, youtube_title, song_url))
+    exit()
     track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', ''))
     print('Song: {} => {}'.format(track, song_url))
     os.system('youtube-dl -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
