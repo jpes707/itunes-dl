@@ -64,20 +64,21 @@ def get_lyrics(track, artist):
         return None
 
 
-def get_song_url(track, artist):
+def get_song_url(track, artist, album=''):
     try:
-        song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + artist).replace(' ', '+'))
+        song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + artist + '+' + album).replace(' ', '+'))
         song_search_res_json = str(requests.get(song_search_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'}).text)
         song_search_res_json = song_search_res_json[song_search_res_json.rindex('data: "')+7:song_search_res_json.rindex('}"')+1]#.replace('\\', '')
         song_search_res_json = song_search_res_json.replace(r'\\"', '\x1a')  # replace \\" with substitute
         song_search_res_json = song_search_res_json.replace('\\', '')  # remove all \
         song_search_res_json = song_search_res_json.replace('\x1a', r'\"')  # replace substitute with \"
         song_search_res = json.loads(song_search_res_json)
-        if song_search_res['contents']['sectionListRenderer']['contents'][0]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
+        top_result_idx = 0 if 'musicShelfRenderer' in song_search_res['contents']['sectionListRenderer']['contents'][0] else 1
+        if 'watchEndpoint' in song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand'] and song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
             print('{} top result is a SONG'.format(track))
             song_url = 'https://music.youtube.com/watch?v={}'.format(song_search_res['contents']['sectionListRenderer']['contents'][0]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['videoId'])
         else:
-            print('{} top result is a VIDEO'.format(track))
+            print('{} top result is a NOT A SONG'.format(track))
             for i in range(1, len(song_search_res['contents']['sectionListRenderer']['contents'])):
                 if song_search_res['contents']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['title']['runs'][0]['text'] == 'Songs':
                     songs_idx = i
@@ -94,7 +95,7 @@ def get_song_url(track, artist):
 
 def download_song(track, track_num, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path):
     for i in range(5):
-        song_url = get_song_url(track, album_artist)
+        song_url = get_song_url(track, album_artist, album_name)
         if song_url:
             print('Song URL found (trial {}): {}'.format(i, track))
             break
