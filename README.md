@@ -10,7 +10,7 @@ Automatic iTunes album downloader for Windows
 
 * Complete song metadata (artist, song names, genre, etc. from Apple Music)
 
-* Album art (1000x1000 pixels from Apple Music)
+* Album art (1000x1000 pixels from Apple Music, CURRENTLY ONLY SHOWS IN ITUNES)
 
 * Highest allowable audio quality with VBR (from YouTube Music)
 
@@ -25,6 +25,8 @@ Automatic iTunes album downloader for Windows
 3. Ensure the python `site-packages` folder is on PATH so the `youtube-dl` module can be called from the Command Prompt.
 
 4. Add the repository folder to PATH.
+
+5. If lyrics are desired, create a file in the directory called `genius-key.txt` and place a free Genius API key from `https://docs.genius.com/` in that file. If lyrics are not desired, modify the `itunes_dl.py` file and change the `download_lyrics` variable on line 20 to `False`.
 
 ## Usage
 

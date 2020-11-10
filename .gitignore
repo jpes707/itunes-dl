@@ -131,3 +131,6 @@ dmypy.json
 # others
 .vscode/
 cache/
+
+# Genius API key
+genius-key.txt

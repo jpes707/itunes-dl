@@ -2,3 +2,6 @@ youtube-dl
 eyed3
 titlecase
 fuzzywuzzy
+python-Levenshtein
+lyricsgenius
+webptools
