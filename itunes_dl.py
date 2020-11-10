@@ -19,13 +19,14 @@ from webptools import dwebp
 use_legacy_names = True
 download_lyrics = True  # Genius API key must be in `genius-key.txt` if True
 
-legacy_names = {'The Chicks': 'Dixie Chicks', 'Lady A': 'Lady Antebellum'}
-if download_lyrics:
-    genius = lyricsgenius.Genius(open('genius-key.txt', 'r').read())
-
 
 def get_relative_path(*args):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), *args)
+
+
+legacy_names = {'The Chicks': 'Dixie Chicks', 'Lady A': 'Lady Antebellum'}
+if download_lyrics:
+    genius = lyricsgenius.Genius(open(get_relative_path('genius-key.txt'), 'r').read())
 
 
 def get_titlecase(s, override_legacy_rename=False):
