@@ -218,8 +218,11 @@ def main(album_url=None):
 
     track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '')) for idx, track in enumerate(album_tracks)]
     for track_filename in track_filenames:
-        print('{} is complete!'.format(track_filename))
-        os.replace(os.path.join(downloads_path, track_filename), os.path.join(itunes_add_path, track_filename))
+        try:
+            os.replace(os.path.join(downloads_path, track_filename), os.path.join(itunes_add_path, track_filename))
+            print('{} is complete!'.format(track_filename))
+        except:
+            print('{} was NOT downloaded.'.format(track_filename))
     # sleep(5)
     # album_folder_path = os.path.join(itunes_path, 'iTunes Media', 'Music', album_artist, album_name)
     # for track_filename in track_filenames:
