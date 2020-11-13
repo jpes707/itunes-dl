@@ -36,4 +36,4 @@ Automatic iTunes album downloader for Windows
 
 * Example for an album with no deluxe version: `itunes-dl https://music.apple.com/us/album/folklore/1524801260`
 
-* Example for an album with a deluxe version: `itunes-dl https://music.apple.com/gb/album/1989-deluxe-edition/1445881848` `https://music.apple.com/gb/album/1989/1445888258`
+* Example for an album with a deluxe version: `itunes-dl https://music.apple.com/gb/album/1989-deluxe-edition/1445881848 https://music.apple.com/gb/album/1989/1445888258`
