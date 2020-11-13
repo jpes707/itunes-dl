@@ -1,6 +1,7 @@
 # pylint: disable=W1401
 
 import os
+import subprocess
 import sys
 import eyed3
 import json
@@ -27,6 +28,9 @@ def get_relative_path(*args):
 legacy_names = {'The Chicks': 'Dixie Chicks', 'Lady A': 'Lady Antebellum'}
 if download_lyrics:
     genius = lyricsgenius.Genius(open(get_relative_path('genius-key.txt'), 'r').read())
+    genius.verbose = False  # suppress print messages
+
+pending_thread_song = None
 
 
 def get_titlecase(s, override_legacy_rename=False):
@@ -64,55 +68,95 @@ def get_lyrics(track, artist):
         return None
 
 
-def get_song_url(track, artist, album=''):
+def get_youtube_music_song_metadata(song_obj):
+    song_name = song_obj['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
+    artist_name = song_obj['flexColumns'][2]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
+    album_name =  song_obj['flexColumns'][3]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
+    song_url = 'https://music.youtube.com/watch?v={}'.format(song_obj['doubleTapCommand']['watchEndpoint']['videoId'])
+    return {'youtube_song_name': song_name, 'youtube_album_name': album_name, 'youtube_artist_name': artist_name, 'song_url': song_url}
+
+
+def get_song_url(track, artist, track_num=None, album='', deluxe_album=''):
     try:
         song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + artist + '+' + album).replace(' ', '+'))
+        # print('Searching... {}'.format(song_search_url))
         song_search_res_json = str(requests.get(song_search_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'}).text)
         song_search_res_json = song_search_res_json[song_search_res_json.rindex('data: "')+7:song_search_res_json.rindex('}"')+1]#.replace('\\', '')
         song_search_res_json = song_search_res_json.replace(r'\\"', '\x1a')  # replace \\" with substitute
         song_search_res_json = song_search_res_json.replace('\\', '')  # remove all \
         song_search_res_json = song_search_res_json.replace('\x1a', r'\"')  # replace substitute with \"
         song_search_res = json.loads(song_search_res_json)
+        potential_songs = []
+        # refer to sample-youtube-music-json.txt for an example of the song_search_res object
         top_result_idx = 0 if 'musicShelfRenderer' in song_search_res['contents']['sectionListRenderer']['contents'][0] else 1
         if 'watchEndpoint' in song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand'] and song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
-            print('{} top result is a SONG'.format(track))
-            song_url = 'https://music.youtube.com/watch?v={}'.format(song_search_res['contents']['sectionListRenderer']['contents'][0]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['videoId'])
+            # print('{} top result is a SONG'.format(track))
+            song_obj = song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']
+            potential_songs.append(get_youtube_music_song_metadata(song_obj))
+        for i in range(1, len(song_search_res['contents']['sectionListRenderer']['contents'])):
+            if song_search_res['contents']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['title']['runs'][0]['text'] == 'Songs':
+                songs_idx = i
+                break
         else:
-            print('{} top result is a NOT A SONG'.format(track))
-            for i in range(1, len(song_search_res['contents']['sectionListRenderer']['contents'])):
-                if song_search_res['contents']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['title']['runs'][0]['text'] == 'Songs':
-                    songs_idx = i
-                    break
-            else:
-                songs_idx = None
-            song_url = 'https://music.youtube.com/watch?v={}'.format(song_search_res['contents']['sectionListRenderer']['contents'][songs_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['videoId'])
-        return song_url
+            return None
+        for i in range(3):
+            song_obj = song_search_res['contents']['sectionListRenderer']['contents'][songs_idx]['musicShelfRenderer']['contents'][i]['musicResponsiveListItemRenderer']
+            potential_songs.append(get_youtube_music_song_metadata(song_obj))
+        for idx, song in enumerate(potential_songs):
+            potential_songs[idx]['song_name_score'] = fuzz.ratio(track, song['youtube_song_name'])
+            potential_songs[idx]['album_name_score'] = max(fuzz.ratio(album, song['youtube_album_name']), fuzz.ratio(deluxe_album, song['youtube_album_name']))
+            potential_songs[idx]['artist_name_score'] = fuzz.ratio(artist, song['youtube_artist_name'])
+            potential_songs[idx]['overall_score'] = potential_songs[idx]['song_name_score'] * 2 + potential_songs[idx]['album_name_score'] + potential_songs[idx]['artist_name_score'] * 2  # 500 is a perfect match, 0 is no match
+        chosen_song = sorted(potential_songs, key=lambda i: i['overall_score'], reverse=True)[0]
+        if chosen_song['song_name_score'] < 50 or chosen_song['album_name_score'] < 50 or chosen_song['artist_name_score'] < 50:
+            global pending_thread_song, url_pending
+            if track_num:
+                url_pending[track_num - 1] = True
+            while pending_thread_song != track:
+                sleep(1)
+            print('WARNING! AN INCORRECT SONG MAY BE DOWNLOADED. Track "{}" has a low song, album, and/or artist match score => {}'.format(track, chosen_song))
+            manual_url_ask = input('Would you like to manually provide a correct URL (y/[n])? ')
+            if manual_url_ask.lower() == 'y':
+                chosen_song['song_url'] = input('Paste a URL to any MP3/video on the internet for track "{}" (can be on YouTube, does not have to be): ')
+            if manual_url_ask.lower().startswith('http'):
+                chosen_song['song_url'] = manual_url_ask
+        if track_num:
+            url_pending[track_num - 1] = False
+        return chosen_song['song_url']
     except:
-        print(song_search_res_json)
+        # print(song_search_res_json)
         return None
 
 
+def attempt_youtube_dl_download(downloads_path, track_file, song_url):
+    try:
+        subprocess.check_output('youtube-dl -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
+        return True
+    except:
+        return False
 
-def download_song(track, track_num, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path):
-    for i in range(5):
-        song_url = get_song_url(track, album_artist, album_name)
+
+def download_song(track, track_num, is_deluxe, album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path):
+    for _ in range(5):
+        song_url = get_song_url(track, album_artist, track_num, album_name, deluxe_album_name)
         if song_url:
-            print('Song URL found (trial {}): {}'.format(i, track))
             break
-        else:
-            print('Song URL not found (trial {}): {}'.format(i, track))
     else:
-        print('WARNING! Song will not be downloaded: {}'.format(track))
+        print('WARNING! Song will not be downloaded because URL could not be found after five tries: "{}"'.format(track))
         return
     
     track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', ''))
     track_path = os.path.join(downloads_path, '{}.mp3'.format(track_file))
     
-    print('Song: {} => {}'.format(track, song_url))
-    os.system('youtube-dl -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
-    while not os.path.exists(track_path):
-        print('Retrying... {} => {}'.format(track, song_url))
-        os.system('youtube-dl -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
+    print('{} => {}'.format(track, song_url))
+    
+    for _ in range(5):
+        song_downloaded = attempt_youtube_dl_download(downloads_path, track_file, song_url)
+        if song_downloaded:
+            break
+    else:
+        print('WARNING! Song will not be downloaded because youtube-dl failed five times: "{}" at {}'.format(track, song_url))
+        return
     
     audiofile = eyed3.load(track_path)
     if (audiofile.tag == None):
@@ -128,27 +172,32 @@ def download_song(track, track_num, album_artist, album_artist_current, album_na
     audiofile.tag.track_num = track_num
 
     audiofile.tag.images.set(3, open(album_artwork_path, 'rb').read(), 'image/png')
-    audiofile.tag.disc_num = 1
+    audiofile.tag.disc_num = 2 if is_deluxe else 1
 
     if download_lyrics:
-        print('Finding lyrics: {}'.format(track))
-        for i in range(5):
+        for _ in range(5):
             lyrics = get_lyrics(track, album_artist)
             if lyrics:
-                print('Lyrics found (trial {}): {}'.format(i, track))
                 audiofile.tag.lyrics.set(lyrics)
                 break
-            else:
-                print('Lyrics not found (trial {}): {}'.format(i, track))
         else:
-            print('WARNING! Lyrics will not be downloaded: {}'.format(track))
+            print('WARNING! Lyrics will not be downloaded because Genius did not return lyrics five times: "{}"'.format(track))
     audiofile.tag.save(encoding='utf-8', version=eyed3.id3.ID3_V2_4)
 
 
-def main(album_url=None):
+def main(album_url=None, normal_url=None):
     if not album_url:
         album_url = input('Apple Music URL (https://music.apple.com/xxx) for the album: ')
-
+    if normal_url and normal_url.lower() == 'n':
+        normal_url = album_url
+    if not normal_url:
+        normal_url = album_url
+        album_deluxe_ask = input('Is this album a deluxe version (y/[n])? ')
+        if album_deluxe_ask.lower() == 'y':
+            normal_url = input('Apple Music URL (https://music.apple.com/xxx) for the NON-DELUXE album version: ')
+        if album_deluxe_ask.lower().startswith('http'):
+            normal_url = album_deluxe_ask
+    
     if not os.path.exists(get_relative_path('cache', 'artwork')):
         if not os.path.exists(get_relative_path('cache')):
             os.mkdir(get_relative_path('cache'))
@@ -171,33 +220,25 @@ def main(album_url=None):
     os.mkdir(downloads_path)
     atexit.register(shutil.rmtree, downloads_path)
 
-    album_res = requests.get(album_url).text
+    album_res = requests.get(normal_url).text
     schema_start_string = '<script name="schema:music-album" type="application/ld+json">'
     schema_start_index = album_res.index(schema_start_string)
     album_schema = json.loads(album_res[schema_start_index + len(schema_start_string) : album_res.index('</script>', schema_start_index)])
 
     album_name = get_titlecase(album_schema['name'])
-    album_track_count = len(album_schema['tracks'])
+    normal_album_track_count = len(album_schema['tracks'])
     album_year = int(album_schema['datePublished'][:4])
     album_artist = get_titlecase(album_schema['byArtist']['name'])
     album_artist_current = get_titlecase(album_schema['byArtist']['name'], True)
     album_genre = album_schema['genre'][0]
-    album_tracks = [get_titlecase(track['name']) for track in album_schema['tracks']]
-
-    print(album_name, album_artist, album_genre, album_track_count, album_year, album_tracks)
-
-    artwork_start_str = '<source sizes="(min-width:740px) and (max-width:999px) 270px, (min-width:1000px) and (max-width:1319px) 300px,  500px" srcset="'
-    artwork_start_idx = album_res.index(artwork_start_str)
-    artwork_search_str = album_res[artwork_start_idx + len(artwork_start_str) : album_res.index('" height="300" width="300" alt role="presentation">', artwork_start_idx)]
-    artwork_search_str = artwork_search_str[:artwork_search_str.index('1000w')]
-    artwork_search_str = artwork_search_str[artwork_search_str.rindex(',')+1:]
-    album_artwork_url = artwork_search_str.strip()
-    print(artwork_search_str)
-
-    print(album_artwork_url)
+    
     webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year))
     album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year))
     if not os.path.exists(album_artwork_path):
+        artwork_search_str = album_res[:album_res.index(' 1000w')]
+        artwork_search_str = artwork_search_str[artwork_search_str.rindex('https://'):]
+        album_artwork_url = artwork_search_str.strip()
+        print(album_artwork_url)
         r = requests.get(album_artwork_url, stream=True)
         if r.status_code == 200:
             with open(webp_artwork_path, 'wb') as f:
@@ -206,15 +247,40 @@ def main(album_url=None):
             dwebp(webp_artwork_path, album_artwork_path, '-o')
             os.remove(webp_artwork_path)
     
-    thread_set = set()
+    if normal_url != album_url:
+        deluxe_album_res = requests.get(album_url).text
+        schema_start_index = deluxe_album_res.index(schema_start_string)
+        album_schema = json.loads(deluxe_album_res[schema_start_index + len(schema_start_string) : deluxe_album_res.index('</script>', schema_start_index)])
+
+    deluxe_album_track_count = len(album_schema['tracks'])
+    deluxe_album_name = get_titlecase(album_schema['name'])
+    album_tracks = [get_titlecase(track['name']) for track in album_schema['tracks']]
+    is_deluxe_list = [False] * normal_album_track_count + [True] * (deluxe_album_track_count - normal_album_track_count)
+    
+    print(album_name, album_artist, album_genre, deluxe_album_track_count, album_year, album_tracks)
+    print()
+
+    thread_list = []
+    global url_pending
+    url_pending = [None] * len(album_tracks)
     for idx, track in enumerate(album_tracks):
-        print('Downloading "{}" (track {}/{})...'.format(track, idx+1, album_track_count))
-        current_thread = Thread(target=download_song, args=(track, idx+1, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path))
+        # print('Downloading "{}" (track {}/{})...'.format(track, idx+1, album_track_count))
+        current_thread = Thread(target=download_song, args=(track, idx+1, is_deluxe_list[idx], album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path))
         current_thread.start()
-        #download_song(track, idx+1, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path)
-        thread_set.add(current_thread)
-    for thread in thread_set:
-        thread.join()
+        # download_song(track, idx+1, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path)
+        thread_list.append(current_thread)
+    while None in url_pending:
+        sleep(1)
+    for idx, thread in enumerate(thread_list):
+        if not url_pending[idx]:
+            thread.join()
+    for idx, thread in enumerate(thread_list):
+        if url_pending[idx]:
+            global pending_thread_song
+            pending_thread_song = album_tracks[idx]
+            thread.join()
+
+    print()
 
     track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '')) for idx, track in enumerate(album_tracks)]
     for track_filename in track_filenames:
@@ -232,7 +298,9 @@ def main(album_url=None):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
+        main(sys.argv[1], sys.argv[2])
+    elif len(sys.argv) > 1:
         main(sys.argv[1])
     else:
         main()

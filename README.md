@@ -16,6 +16,8 @@ Automatic iTunes album downloader for Windows
 
 * Correct title casing for all songs, albums, etc.
 
+* Option to download tracks from the deluxe version of an album without changing the album artwork or name
+
 ## Installation
 
 1. Clone the repository.
@@ -30,6 +32,8 @@ Automatic iTunes album downloader for Windows
 
 ## Usage
 
-* Command Prompt: `itunes-dl <Apple Music album link>`
+* Command Prompt: `itunes-dl <Apple Music album link (can be deluxe)> <optional: if first argument is a deluxe album, then Apple Music album link for the non-deluxe version>`
 
-* Example: `itunes-dl https://music.apple.com/us/album/folklore/1524801260`
+* Example for an album with no deluxe version: `itunes-dl https://music.apple.com/us/album/folklore/1524801260`
+
+* Example for an album with a deluxe version: `https://music.apple.com/gb/album/1989-deluxe-edition/1445881848` `https://music.apple.com/gb/album/1989/1445888258`
