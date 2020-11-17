@@ -32,8 +32,8 @@ Automatic iTunes album downloader for Windows
 
 ## Usage
 
-* Command Prompt: `itunes-dl <Apple Music album link (can be deluxe)> <optional: if first argument is a deluxe album, then Apple Music album link for the non-deluxe version>`
+* Command Prompt: `itunes-dl <Apple Music album link (can be deluxe)> <optional: if first argument is a deluxe album, then Apple Music album link for the non-deluxe version; if not, then type "n" to skip prompt>`
 
-* Example for an album with no deluxe version: `itunes-dl https://music.apple.com/us/album/folklore/1524801260`
+* Example for an album with no deluxe version: `itunes-dl https://music.apple.com/us/album/folklore/1524801260 n`
 
 * Example for an album with a deluxe version: `itunes-dl https://music.apple.com/gb/album/1989-deluxe-edition/1445881848 https://music.apple.com/gb/album/1989/1445888258`
