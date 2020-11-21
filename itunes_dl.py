@@ -232,8 +232,8 @@ def main(album_url=None, normal_url=None):
     album_artist_current = get_titlecase(album_schema['byArtist']['name'], True)
     album_genre = album_schema['genre'][0]
     
-    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year))
-    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year))
+    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', ''))
+    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', ''))
     if not os.path.exists(album_artwork_path):
         artwork_search_str = album_res[:album_res.index(' 1000w')]
         artwork_search_str = artwork_search_str[artwork_search_str.rindex('https://'):]
