@@ -137,12 +137,12 @@ def attempt_youtube_dl_download(downloads_path, track_file, song_url):
 
 
 def download_song(track, track_num, is_deluxe, album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path):
-    for _ in range(5):
+    for _ in range(10):
         song_url = get_song_url(track, album_artist, track_num, album_name, deluxe_album_name)
         if song_url:
             break
     else:
-        print('WARNING! Song will not be downloaded because URL could not be found after five tries: "{}"'.format(track))
+        print('WARNING! Song will not be downloaded because URL could not be found after ten tries: "{}"'.format(track))
         return
     
     track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', ''))
@@ -150,12 +150,14 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
     
     print('{} => {}'.format(track, song_url))
     
-    for _ in range(5):
+    for _ in range(60):
         song_downloaded = attempt_youtube_dl_download(downloads_path, track_file, song_url)
         if song_downloaded:
             break
+        else:
+            sleep(1)
     else:
-        print('WARNING! Song will not be downloaded because youtube-dl failed five times: "{}" at {}'.format(track, song_url))
+        print('WARNING! Song will not be downloaded because youtube-dl failed sixty times: "{}" at {}'.format(track, song_url))
         return
     
     audiofile = eyed3.load(track_path)
@@ -175,13 +177,13 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
     audiofile.tag.disc_num = 2 if is_deluxe else 1
 
     if download_lyrics:
-        for _ in range(5):
+        for _ in range(10):
             lyrics = get_lyrics(track, album_artist)
             if lyrics:
                 audiofile.tag.lyrics.set(lyrics)
                 break
         else:
-            print('WARNING! Lyrics will not be downloaded because Genius did not return lyrics five times: "{}"'.format(track))
+            print('WARNING! Lyrics will not be downloaded because Genius did not return lyrics ten times: "{}"'.format(track))
     audiofile.tag.save(encoding='utf-8', version=eyed3.id3.ID3_V2_4)
 
 
