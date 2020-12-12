@@ -155,7 +155,7 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
         if song_downloaded:
             break
         else:
-            sleep(1)
+            sleep(5)
     else:
         print('WARNING! Song will not be downloaded because youtube-dl failed sixty times: "{}" at {}'.format(track, song_url))
         return
