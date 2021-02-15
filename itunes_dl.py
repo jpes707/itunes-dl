@@ -9,8 +9,8 @@ import requests
 import shutil
 import re
 import atexit
-import json
 import lyricsgenius
+import warnings
 from fuzzywuzzy import fuzz, process
 from titlecase import titlecase
 from time import time, sleep
@@ -29,6 +29,7 @@ legacy_names = {'The Chicks': 'Dixie Chicks', 'Lady A': 'Lady Antebellum'}
 if download_lyrics:
     genius = lyricsgenius.Genius(open(get_relative_path('genius-key.txt'), 'r').read())
     genius.verbose = False  # suppress print messages
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 pending_thread_song = None
 
@@ -70,9 +71,9 @@ def get_lyrics(track, artist):
 
 def get_youtube_music_song_metadata(song_obj):
     song_name = song_obj['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
-    artist_name = song_obj['flexColumns'][2]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
-    album_name =  song_obj['flexColumns'][3]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['text']
-    song_url = 'https://music.youtube.com/watch?v={}'.format(song_obj['doubleTapCommand']['watchEndpoint']['videoId'])
+    artist_name = song_obj['flexColumns'][1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][2]['text']
+    album_name =  song_obj['flexColumns'][1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][4]['text'] if len(song_obj['flexColumns']) > 2 else None
+    song_url = 'https://music.youtube.com/watch?v={}'.format(song_obj['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['navigationEndpoint']['watchEndpoint']['videoId'])
     return {'youtube_song_name': song_name, 'youtube_album_name': album_name, 'youtube_artist_name': artist_name, 'song_url': song_url}
 
 
@@ -80,16 +81,20 @@ def get_song_url(track, artist, track_num=None, album='', deluxe_album=''):
     try:
         song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + artist + '+' + album).replace(' ', '+'))
         # print('Searching... {}'.format(song_search_url))
-        song_search_res_json = str(requests.get(song_search_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'}).text)
-        song_search_res_json = song_search_res_json[song_search_res_json.rindex('data: "')+7:song_search_res_json.rindex('}"')+1]#.replace('\\', '')
-        song_search_res_json = song_search_res_json.replace(r'\\"', '\x1a')  # replace \\" with substitute
+        res = requests.get(song_search_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36'})
+        song_search_res_json = res.text
+        res.close()
+        song_search_res_json = song_search_res_json[song_search_res_json.rindex('data:')+7:]
+        song_search_res_json = song_search_res_json[:song_search_res_json.index('\'')]
+        song_search_res_json = bytes(song_search_res_json, 'utf-8').decode('unicode_escape')
+        song_search_res_json = song_search_res_json.replace(r'\"', '\x1a')  # replace \\" with substitute
         song_search_res_json = song_search_res_json.replace('\\', '')  # remove all \
         song_search_res_json = song_search_res_json.replace('\x1a', r'\"')  # replace substitute with \"
         song_search_res = json.loads(song_search_res_json)
         potential_songs = []
         # refer to sample-youtube-music-json.txt for an example of the song_search_res object
         top_result_idx = 0 if 'musicShelfRenderer' in song_search_res['contents']['sectionListRenderer']['contents'][0] else 1
-        if 'watchEndpoint' in song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand'] and song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['doubleTapCommand']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
+        if 'navigationEndpoint' in song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0] and song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['navigationEndpoint']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
             # print('{} top result is a SONG'.format(track))
             song_obj = song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']
             potential_songs.append(get_youtube_music_song_metadata(song_obj))
@@ -104,11 +109,12 @@ def get_song_url(track, artist, track_num=None, album='', deluxe_album=''):
             potential_songs.append(get_youtube_music_song_metadata(song_obj))
         for idx, song in enumerate(potential_songs):
             potential_songs[idx]['song_name_score'] = fuzz.ratio(track, song['youtube_song_name'])
-            potential_songs[idx]['album_name_score'] = max(fuzz.ratio(album, song['youtube_album_name']), fuzz.ratio(deluxe_album, song['youtube_album_name']))
+            potential_songs[idx]['album_name_score'] = max(fuzz.ratio(album, song['youtube_album_name']), fuzz.ratio(deluxe_album, song['youtube_album_name'])) if song['youtube_album_name'] else 100
             potential_songs[idx]['artist_name_score'] = fuzz.ratio(artist, song['youtube_artist_name'])
             potential_songs[idx]['overall_score'] = potential_songs[idx]['song_name_score'] * 2 + potential_songs[idx]['album_name_score'] + potential_songs[idx]['artist_name_score'] * 2  # 500 is a perfect match, 0 is no match
         chosen_song = sorted(potential_songs, key=lambda i: i['overall_score'], reverse=True)[0]
-        if chosen_song['song_name_score'] < 50 or chosen_song['album_name_score'] < 50 or chosen_song['artist_name_score'] < 50:
+        # print(chosen_song['song_name_score'], chosen_song['album_name_score'], chosen_song['artist_name_score'])
+        if chosen_song['song_name_score'] < (50 if 'remix' not in track.lower() else 90) or chosen_song['album_name_score'] < 50 or chosen_song['artist_name_score'] < 50:
             global pending_thread_song, url_pending
             if track_num:
                 url_pending[track_num - 1] = True
@@ -142,10 +148,11 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
         if song_url:
             break
     else:
-        print('WARNING! Song will not be downloaded because URL could not be found after ten tries: "{}"'.format(track))
+        print('WARNING! Song will not be downloaded because URL could not be found after ten tries: "{}" => {}'.format(track, 'https://music.youtube.com/search?q={}'.format((track + '+' + album_artist + '+' + album_name).replace(' ', '+'))))
+        url_pending[track_num - 1] = False
         return
     
-    track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', ''))
+    track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', ''))
     track_path = os.path.join(downloads_path, '{}.mp3'.format(track_file))
     
     print('{} => {}'.format(track, song_url))
@@ -232,18 +239,19 @@ def main(album_url=None, normal_url=None):
     album_year = int(album_schema['datePublished'][:4])
     album_artist = get_titlecase(album_schema['byArtist']['name'])
     album_artist_current = get_titlecase(album_schema['byArtist']['name'], True)
-    album_genre = album_schema['genre'][0]
+    album_genre = album_schema['genre'][0].replace('&amp;', '&')
     
-    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', ''))
-    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', ''))
+    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', ''))
+    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', ''))
     if not os.path.exists(album_artwork_path):
         artwork_search_str = album_res[:album_res.index(' 1000w')]
         artwork_search_str = artwork_search_str[artwork_search_str.rindex('https://'):]
         album_artwork_url = artwork_search_str.strip()
         print(album_artwork_url)
         r = requests.get(album_artwork_url, stream=True)
+        print(webp_artwork_path)
         if r.status_code == 200:
-            with open(webp_artwork_path, 'wb') as f:
+            with open(webp_artwork_path, 'wb+') as f:
                  r.raw.decode_content = True
                  shutil.copyfileobj(r.raw, f)
             dwebp(webp_artwork_path, album_artwork_path, '-o')
@@ -256,7 +264,7 @@ def main(album_url=None, normal_url=None):
 
     deluxe_album_track_count = len(album_schema['tracks'])
     deluxe_album_name = get_titlecase(album_schema['name'])
-    album_tracks = [get_titlecase(track['name']) for track in album_schema['tracks']]
+    album_tracks = [get_titlecase(track['name']).replace('F*****g', 'Fucking') for track in album_schema['tracks']]
     is_deluxe_list = [False] * normal_album_track_count + [True] * (deluxe_album_track_count - normal_album_track_count)
     
     print(album_name, album_artist, album_genre, deluxe_album_track_count, album_year, album_tracks)
