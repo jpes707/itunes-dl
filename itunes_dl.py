@@ -77,7 +77,7 @@ def get_youtube_music_song_metadata(song_obj):
     return {'youtube_song_name': song_name, 'youtube_album_name': album_name, 'youtube_artist_name': artist_name, 'song_url': song_url}
 
 
-def get_song_url(track, artist, track_num=None, album='', deluxe_album=''):
+def get_song_url(track, artist, do_manual, track_num=None, album='', deluxe_album=''):
     try:
         song_search_url = 'https://music.youtube.com/search?q={}'.format((track + '+' + artist + '+' + album).replace(' ', '+'))
         # print('Searching... {}'.format(song_search_url))
@@ -114,7 +114,7 @@ def get_song_url(track, artist, track_num=None, album='', deluxe_album=''):
             potential_songs[idx]['overall_score'] = potential_songs[idx]['song_name_score'] * 2 + potential_songs[idx]['album_name_score'] + potential_songs[idx]['artist_name_score'] * 2  # 500 is a perfect match, 0 is no match
         chosen_song = sorted(potential_songs, key=lambda i: i['overall_score'], reverse=True)[0]
         # print(chosen_song['song_name_score'], chosen_song['album_name_score'], chosen_song['artist_name_score'])
-        if chosen_song['song_name_score'] < (50 if 'remix' not in track.lower() else 90) or chosen_song['album_name_score'] < 50 or chosen_song['artist_name_score'] < 50:
+        if do_manual or chosen_song['song_name_score'] < (50 if 'remix' not in track.lower() else 90) or chosen_song['album_name_score'] < 50 or chosen_song['artist_name_score'] < 50:
             global pending_thread_song, url_pending
             if track_num:
                 url_pending[track_num - 1] = True
@@ -142,9 +142,9 @@ def attempt_youtube_dl_download(downloads_path, track_file, song_url):
         return False
 
 
-def download_song(track, track_num, is_deluxe, album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path):
+def download_song(track, track_num, is_deluxe, album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path, do_manual):
     for _ in range(10):
-        song_url = get_song_url(track, album_artist, track_num, album_name, deluxe_album_name)
+        song_url = get_song_url(track, album_artist, do_manual, track_num, album_name, deluxe_album_name)
         if song_url:
             break
     else:
@@ -199,7 +199,8 @@ def main(album_url=None, normal_url=None):
         album_url = input('Apple Music URL (https://music.apple.com/xxx) for the album: ')
     if normal_url and normal_url.lower() == 'n':
         normal_url = album_url
-    if not normal_url:
+    do_manual = normal_url and normal_url.lower() == 'x'
+    if not normal_url or do_manual:
         normal_url = album_url
         album_deluxe_ask = input('Is this album a deluxe version (y/[n])? ')
         if album_deluxe_ask.lower() == 'y':
@@ -241,8 +242,8 @@ def main(album_url=None, normal_url=None):
     album_artist_current = get_titlecase(album_schema['byArtist']['name'], True)
     album_genre = album_schema['genre'][0].replace('&amp;', '&')
     
-    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', ''))
-    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', ''))
+    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', ''))
+    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', ''))
     if not os.path.exists(album_artwork_path):
         artwork_search_str = album_res[:album_res.index(' 1000w')]
         artwork_search_str = artwork_search_str[artwork_search_str.rindex('https://'):]
@@ -275,7 +276,7 @@ def main(album_url=None, normal_url=None):
     url_pending = [None] * len(album_tracks)
     for idx, track in enumerate(album_tracks):
         # print('Downloading "{}" (track {}/{})...'.format(track, idx+1, album_track_count))
-        current_thread = Thread(target=download_song, args=(track, idx+1, is_deluxe_list[idx], album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path))
+        current_thread = Thread(target=download_song, args=(track, idx+1, is_deluxe_list[idx], album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path, do_manual))
         current_thread.start()
         # download_song(track, idx+1, album_artist, album_artist_current, album_name, album_genre, album_year, album_artwork_path, downloads_path)
         thread_list.append(current_thread)
@@ -292,7 +293,7 @@ def main(album_url=None, normal_url=None):
 
     print()
 
-    track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '')) for idx, track in enumerate(album_tracks)]
+    track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', '')) for idx, track in enumerate(album_tracks)]
     for track_filename in track_filenames:
         try:
             os.replace(os.path.join(downloads_path, track_filename), os.path.join(itunes_add_path, track_filename))
