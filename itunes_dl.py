@@ -152,7 +152,7 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
         url_pending[track_num - 1] = False
         return
     
-    track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', ''))
+    track_file = '{} {}'.format(str(track_num).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', '').replace('/', '').replace('\\', ''))
     track_path = os.path.join(downloads_path, '{}.mp3'.format(track_file))
     
     print('{} => {}'.format(track, song_url))
@@ -242,8 +242,8 @@ def main(album_url=None, normal_url=None):
     album_artist_current = get_titlecase(album_schema['byArtist']['name'], True)
     album_genre = album_schema['genre'][0].replace('&amp;', '&')
     
-    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', ''))
-    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', ''))
+    webp_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.webp'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', '').replace('/', '').replace('\\', ''))
+    album_artwork_path = get_relative_path('cache', 'artwork', '{}-{}-{}.png'.format(album_artist.replace(' ', '_'), album_name.replace(' ', '_'), album_year).replace('?', '').replace('"', '').replace('*', '').replace('/', '').replace('\\', ''))
     if not os.path.exists(album_artwork_path):
         artwork_search_str = album_res[:album_res.index(' 1000w')]
         artwork_search_str = artwork_search_str[artwork_search_str.rindex('https://'):]
@@ -265,7 +265,7 @@ def main(album_url=None, normal_url=None):
 
     deluxe_album_track_count = len(album_schema['tracks'])
     deluxe_album_name = get_titlecase(album_schema['name'])
-    album_tracks = [get_titlecase(track['name']).replace('F*****g', 'Fucking') for track in album_schema['tracks']]
+    album_tracks = [get_titlecase(track['name']) for track in album_schema['tracks']]
     is_deluxe_list = [False] * normal_album_track_count + [True] * (deluxe_album_track_count - normal_album_track_count)
     
     print(album_name, album_artist, album_genre, deluxe_album_track_count, album_year, album_tracks)
@@ -293,7 +293,7 @@ def main(album_url=None, normal_url=None):
 
     print()
 
-    track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', '')) for idx, track in enumerate(album_tracks)]
+    track_filenames = ['{} {}.mp3'.format(str(idx+1).zfill(2), track.replace(':', '').replace('?', '').replace('!', '').replace('"', '').replace('*', '').replace('/', '').replace('\\', '')) for idx, track in enumerate(album_tracks)]
     for track_filename in track_filenames:
         try:
             os.replace(os.path.join(downloads_path, track_filename), os.path.join(itunes_add_path, track_filename))
