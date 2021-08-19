@@ -27,7 +27,7 @@ def get_relative_path(*args):
 
 legacy_names = {'The Chicks': 'Dixie Chicks', 'Lady A': 'Lady Antebellum'}
 if download_lyrics:
-    genius = lyricsgenius.Genius(open(get_relative_path('genius-key.txt'), 'r').read())
+    genius = lyricsgenius.Genius(open(get_relative_path('genius-key.txt'), 'r').read(), skip_non_songs=True, remove_section_headers=True)
     genius.verbose = False  # suppress print messages
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
@@ -64,6 +64,7 @@ def get_lyrics(track, artist):
             if not line or (line[0] != '[' and line[-1] != ']'):
                 lyrics_stripped += line.replace('  ', ' ') + '\n'
         lyrics_stripped = lyrics_stripped[:-1]
+        lyrics_stripped = re.sub(r'[0-9]+EmbedShare URLCopyEmbedCopy','',lyrics)
         return lyrics_stripped
     except:
         return None
@@ -93,19 +94,19 @@ def get_song_url(track, artist, do_manual, track_num=None, album='', deluxe_albu
         song_search_res = json.loads(song_search_res_json)
         potential_songs = []
         # refer to sample-youtube-music-json.txt for an example of the song_search_res object
-        top_result_idx = 0 if 'musicShelfRenderer' in song_search_res['contents']['sectionListRenderer']['contents'][0] else 1
-        if 'navigationEndpoint' in song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0] and song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['navigationEndpoint']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
+        top_result_idx = 0 if 'tabRenderer' in song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0] else 1
+        if 'navigationEndpoint' in song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0] and song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'][0]['navigationEndpoint']['watchEndpoint']['watchEndpointMusicSupportedConfigs']['watchEndpointMusicConfig']['musicVideoType'] == 'MUSIC_VIDEO_TYPE_ATV':
             # print('{} top result is a SONG'.format(track))
-            song_obj = song_search_res['contents']['sectionListRenderer']['contents'][top_result_idx]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']
+            song_obj = song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'][top_result_idx]['tabRenderer']['content']['sectionListRenderer']['contents'][0]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']
             potential_songs.append(get_youtube_music_song_metadata(song_obj))
-        for i in range(1, len(song_search_res['contents']['sectionListRenderer']['contents'])):
-            if song_search_res['contents']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['title']['runs'][0]['text'] == 'Songs':
+        for i in range(1, len(song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'])):
+            if song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['title']['runs'][0]['text'] == 'Songs':
                 songs_idx = i
                 break
         else:
             return None
         for i in range(3):
-            song_obj = song_search_res['contents']['sectionListRenderer']['contents'][songs_idx]['musicShelfRenderer']['contents'][i]['musicResponsiveListItemRenderer']
+            song_obj = song_search_res['contents']['tabbedSearchResultsRenderer']['tabs'][0]['tabRenderer']['content']['sectionListRenderer']['contents'][i]['musicShelfRenderer']['contents'][0]['musicResponsiveListItemRenderer']
             potential_songs.append(get_youtube_music_song_metadata(song_obj))
         for idx, song in enumerate(potential_songs):
             potential_songs[idx]['song_name_score'] = fuzz.ratio(track, song['youtube_song_name'])
@@ -143,7 +144,7 @@ def attempt_youtube_dl_download(downloads_path, track_file, song_url):
 
 
 def download_song(track, track_num, is_deluxe, album_artist, album_artist_current, album_name, deluxe_album_name, album_genre, album_year, album_artwork_path, downloads_path, do_manual):
-    for _ in range(10):
+    for _ in range(1):
         song_url = get_song_url(track, album_artist, do_manual, track_num, album_name, deluxe_album_name)
         if song_url:
             break
