@@ -1,4 +1,4 @@
-youtube-dl
+yt-dlp
 eyed3
 titlecase
 fuzzywuzzy

@@ -16,6 +16,7 @@ from titlecase import titlecase
 from time import time, sleep
 from threading import Thread
 from webptools import dwebp
+from shutil import copyfile
 
 use_legacy_names = True
 download_lyrics = True  # Genius API key must be in `genius-key.txt` if True
@@ -143,7 +144,7 @@ def get_song_url(track, artist, do_manual, track_num=None, album='', deluxe_albu
 
 def attempt_youtube_dl_download(downloads_path, track_file, song_url):
     try:
-        subprocess.check_output('youtube-dl -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
+        subprocess.check_output('yt-dlp -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(os.path.join(downloads_path, track_file), song_url))
         return True
     except:
         return False
@@ -209,9 +210,55 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
     audiofile.tag.save(encoding='utf-8', version=eyed3.id3.ID3_V2_4)
 
 
+def download_generic_youtube(song_url):
+    if not os.path.exists(get_relative_path('cache')):
+        os.mkdir(get_relative_path('cache'))
+    if not os.path.exists(get_relative_path('cache', 'generic-cache')):
+        os.mkdir(get_relative_path('cache', 'generic-cache'))
+    track_number = len(os.listdir(get_relative_path('cache', 'generic-cache'))) + 1
+    track_path = os.path.join(get_relative_path('cache', 'generic-cache'), '{}.mp3'.format(track_number))
+    try:
+        print('ok')
+        print(get_relative_path('cache', 'generic-cache'))
+        print(track_path[:-4])
+        print('yt-dlp -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(track_path[:-4], song_url))
+        subprocess.check_output('yt-dlp -x --audio-format mp3 --audio-quality 0 -o "{}.%(ext)s" "{}"'.format(track_path[:-4], song_url))
+        print('BUENO')
+        track_path = os.path.join(get_relative_path('cache', 'generic-cache'), '{}.mp3'.format(track_number))
+        audiofile = eyed3.load(track_path)
+        if (audiofile.tag == None):
+            audiofile.initTag()  # audiofile.initTag(version=(2, 3, 0))
+        audiofile.tag.title = 'Song title'
+        audiofile.tag.artist = 'Artist'
+        audiofile.tag.album = 'YouTube Downloads'
+        audiofile.tag.album_artist = 'YouTube'
+        audiofile.tag.genre = 'Unclassifiable'
+        audiofile.tag.track_num = track_number
+        audiofile.tag.images.set(3, open(get_relative_path('youtube.png'), 'rb').read(), 'image/png')
+        audiofile.tag.save(encoding='utf-8', version=eyed3.id3.ID3_V2_4)
+        if not os.path.exists(get_relative_path('cache', 'itunes_path.txt')):
+            itunes_path = input('What is the path of your system\'s iTunes folder (e.g. D:\Music\iTunes)? ')
+            f = open(get_relative_path('cache', 'itunes_path.txt'), 'w+')
+            f.write(itunes_path)
+            f.close()
+        else:
+            f = open(get_relative_path('cache', 'itunes_path.txt'), 'r')
+            itunes_path = f.read()
+            f.close()
+        itunes_add_path = os.path.join(itunes_path, 'iTunes Media', 'Automatically Add to iTunes')
+        copyfile(track_path, os.path.join(itunes_add_path, '{}.mp3'.format(track_number)))
+        return True
+    except:
+        return False
+
+
 def main(album_url=None, normal_url=None, song_index=None):
     if not album_url:
         album_url = input('Apple Music URL (https://music.apple.com/xxx) for the album: ')
+    if 'youtube.com' in album_url:
+        success = download_generic_youtube(album_url)
+        print('Generic YouTube song downloaded successfully!' if success else 'Generic YouTube song failed to download.')
+        exit()
     if normal_url and normal_url.lower() == 'n':
         normal_url = album_url
     do_manual = normal_url and normal_url.lower() == 'x'
