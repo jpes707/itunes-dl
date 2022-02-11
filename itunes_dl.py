@@ -203,6 +203,12 @@ def download_song(track, track_num, is_deluxe, album_artist, album_artist_curren
         for _ in range(10):
             lyrics = get_lyrics(track, album_artist)
             if lyrics:
+                idx = lyrics.find('\n')
+                if lyrics[:idx].find('Lyrics') != -1:
+                    lyrics = lyrics[idx + 1:]
+                m = re.search(r'\d*Embed', lyrics)
+                if m:
+                    lyrics = lyrics[:m.start()]
                 audiofile.tag.lyrics.set(lyrics)
                 break
         else:
